@@ -29,7 +29,7 @@ router.post('/send_menu', async (req: Request, res: Response) => {
       options: string[];
       footer?: string;
     };
-
+    
     if (!to || !Array.isArray(options) || options.length === 0) {
       return res.status(400).json({ ok: false, error: 'missing to/options' });
     }
@@ -48,6 +48,34 @@ router.post('/send_menu', async (req: Request, res: Response) => {
       menuText += `*${idx + 1}.* ${label}\n`;
     });
     if (footer) menuText += `\n_${footer}_`;
+
+    await ctx.sock.sendMessage(jid, { text: menuText.trim() });
+    return res.json({ ok: true, hint: 'User should reply with the option number (1, 2, 3...)' });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({ ok: false, error: message });
+  }
+});
+
+// --- 1. TEXTO (opções numeradas) ---
+router.post('/send_message', async (req: Request, res: Response) => {
+  try {
+    const { instance = 'main', to, text } = req.body as {
+      instance?: string;
+      to: string;
+      text?: string;
+      
+    };
+    
+   
+    const ctx = validateInstance(instance, res);
+    if (!ctx) return;
+
+    const jid = toJid(to);
+    if (!jid) return res.status(400).json({ ok: false, error: 'invalid_phone' });
+
+    let menuText = '';
+    
 
     await ctx.sock.sendMessage(jid, { text: menuText.trim() });
     return res.json({ ok: true, hint: 'User should reply with the option number (1, 2, 3...)' });

@@ -27,6 +27,7 @@
   // Tipo de disparo
   const dispatchForms = {
     menu: document.getElementById('formMenu'),
+    message: document.getElementById('formMessage'),
     buttons: document.getElementById('formButtons'),
     interactive: document.getElementById('formInteractive'),
     list: document.getElementById('formList'),
@@ -307,6 +308,9 @@
   function addMenuOption() {
     addRow('menuOptionsList', '<input type="text" placeholder="Texto da opção" data-field="opt">');
   }
+  function addMenuMessage() {
+    addRow('menuOptionsMessage', '<input type="text" placeholder="Texto da opção" data-field="opt">');
+  }
   function addButtonRow() {
     addRow('buttonsList', '<input type="text" placeholder="ID do botão" data-field="id"><input type="text" placeholder="Texto do botão" data-field="text">');
   }
@@ -387,6 +391,7 @@
       else if (forId === 'listSections') addListSection();
       else if (forId === 'pollOptions') addPollOption();
       else if (forId === 'carouselCards') addCarouselCard();
+      else if (forId === 'messageDescricao')  addMenuMessage();
     });
   });
 
@@ -395,6 +400,7 @@
   addButtonRow();
   addInteractiveRow();
   addPollOption();
+  addMenuMessage();
 
   // Coletar dados dos formulários e montar payload
   function getMenuPayload() {
@@ -412,6 +418,22 @@
         text: document.getElementById('menuText').value.trim() || 'Escolha uma opção:',
         options: options.length ? options : ['Opção 1'],
         footer: document.getElementById('menuFooter').value.trim() || undefined,
+      },
+    };
+  }
+    function getMessagePayload() {
+    const options = [];
+    document.querySelectorAll('#menuOptionsMessage .item-row input[data-field="opt"]').forEach((inp) => {
+      const v = inp.value.trim();
+      if (v) options.push(v);
+    });
+    return {
+      url: '/v1/messages/send_message',
+      body: {
+        instance: document.getElementById('dispatchInstance').value,
+        to: document.getElementById('dispatchTo').value.trim(),
+        text: document.getElementById('menuText').value.trim(),
+
       },
     };
   }
@@ -566,6 +588,7 @@
     let payload;
     switch (type) {
       case 'menu': payload = getMenuPayload(); break;
+      case 'message': payload = getMessagePayload(); break;
       case 'buttons': payload = getButtonsPayload(); break;
       case 'interactive': payload = getInteractivePayload(); break;
       case 'list': payload = getListPayload(); break;

@@ -14,33 +14,47 @@ import { config } from '../config.js';
 
 const router = Router();
 
+// Helper para esperar o QR Code ser gerado
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * POST /v1/instances
- * Cria uma nova instância e retorna o QR code em base64 (ou status se já conectada).
+ * Cria uma nova instância.
+ * Aguarda 2s para tentar retornar o QR Code já na primeira resposta.
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
     const { instance = 'main' } = req.body as { instance?: string };
     const name = String(instance).trim() || 'main';
 
+    // 1. Inicia a criação
     const result = await createInstance(name, config.authFolder);
 
     if (!result.ok) {
       return res.status(500).json({ ok: false, error: result.error });
     }
 
+    // 2. Espera um pouco para o socket conectar e gerar o QR Code
+    // (O Baileys leva uns instantes para emitir o evento 'qr')
+    await delay(2000);
+
+    // 3. Busca o estado atual da instância na memória
+    const ctx = getInstance(name);
+
     let qrBase64: string | undefined;
-    if (result.qr) {
-      qrBase64 = await QRCode.toDataURL(result.qr, { width: 400, margin: 2 });
+    
+    // Verifica se o QR Code já está disponível no contexto (ctx) e não no result
+    if (ctx && ctx.qr) {
+      qrBase64 = await QRCode.toDataURL(ctx.qr, { width: 400, margin: 2 });
     }
 
-    const ctx = getInstance(name);
     return res.json({
       ok: true,
       instance: name,
       status: ctx?.status ?? 'connecting',
       qr: qrBase64 ?? null,
     });
+
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return res.status(500).json({ ok: false, error: message });
@@ -60,7 +74,9 @@ router.get('/', (_req: Request, res: Response) => {
   }));
 
   let saved: string[] = [];
-  const authDir = path.resolve(process.cwd(), config.authFolder);
+  // Usa config.authFolder (certifique-se que o nome da pasta bate com o config)
+  const authDir = path.resolve(process.cwd(), 'auth'); 
+  
   try {
     if (fs.existsSync(authDir)) {
       saved = fs.readdirSync(authDir, { withFileTypes: true })
@@ -76,10 +92,10 @@ router.get('/', (_req: Request, res: Response) => {
 
 /**
  * GET /v1/instances/saved
- * Lista apenas nomes das conexões salvas (pastas em auth/).
+ * Lista apenas nomes das conexões salvas.
  */
 router.get('/saved', (_req: Request, res: Response) => {
-  const authDir = path.resolve(process.cwd(), config.authFolder);
+  const authDir = path.resolve(process.cwd(), 'auth'); // Ajuste se seu config usar outro nome
   let saved: string[] = [];
   try {
     if (fs.existsSync(authDir)) {
@@ -100,12 +116,20 @@ router.get('/saved', (_req: Request, res: Response) => {
 router.get('/:name/qr', async (req: Request, res: Response) => {
   const { name } = req.params;
   const ctx = getInstance(name);
+  
   if (!ctx) {
     return res.status(404).json({ ok: false, error: 'instance_not_found' });
   }
-  if (ctx.status !== 'qr' || !ctx.qr) {
-    return res.status(400).json({ ok: false, error: 'no_qr_available', status: ctx.status });
+  
+  // Se estiver conectado, não tem QR
+  if (ctx.status === 'connected') {
+     return res.status(400).json({ ok: false, error: 'already_connected', status: ctx.status });
   }
+
+  if (!ctx.qr) {
+    return res.status(400).json({ ok: false, error: 'qr_not_ready_yet', status: ctx.status });
+  }
+
   const qrBase64 = await QRCode.toDataURL(ctx.qr, { width: 400, margin: 2 });
   return res.json({ ok: true, instance: name, qr: qrBase64 });
 });
@@ -131,7 +155,7 @@ router.get('/:name', (req: Request, res: Response) => {
 
 /**
  * POST /v1/instances/:name/disconnect
- * Desconecta e remove a instância da memória (credenciais ficam em disco; reconectar pode usar sessão salva).
+ * Desconecta e remove a instância da memória.
  */
 router.post('/:name/disconnect', (req: Request, res: Response) => {
   const { name } = req.params;
@@ -141,12 +165,13 @@ router.post('/:name/disconnect', (req: Request, res: Response) => {
 
 /**
  * POST /v1/instances/:name/logout
- * Logout + apaga pasta de auth. Próxima conexão gera novo QR.
+ * Logout + apaga pasta de auth.
  */
 router.post('/:name/logout', async (req: Request, res: Response) => {
   try {
     const { name } = req.params;
-    const result = await logoutInstance(name, config.authFolder);
+    // Ajuste o segundo parâmetro 'auth' se seu config.authFolder for diferente
+    const result = await logoutInstance(name, 'auth'); 
     if (!result.ok) {
       return res.status(500).json({ ok: false, instance: name, error: result.error });
     }
@@ -159,7 +184,7 @@ router.post('/:name/logout', async (req: Request, res: Response) => {
 
 /**
  * DELETE /v1/instances/:name
- * Remove a instância (fecha socket, não apaga credenciais em disco).
+ * Remove a instância (alias para disconnect).
  */
 router.delete('/:name', (req: Request, res: Response) => {
   const { name } = req.params;

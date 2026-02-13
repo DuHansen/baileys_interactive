@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import instancesRouter from './routes/instances.js';
 import messagesRouter from './routes/messages.js';
+import { restoreSessions } from './services/whatsapp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -22,7 +23,7 @@ function apiKeyMiddleware(req: express.Request, res: express.Response, next: exp
 }
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'rsalcara' });
+  res.json({ ok: true, service: 'SimplesAgenda' });
 });
 
 // API key só nas rotas /v1 (a interface em / carrega sem key)
@@ -33,10 +34,32 @@ const publicDir = path.join(__dirname, '..', 'public');
 app.use(express.static(publicDir));
 app.get('/', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
 
-app.listen(config.port, () => {
-  console.log(`[rsalcara] API rodando em http://localhost:${config.port}`);
-  console.log(`[rsalcara] Interface: http://localhost:${config.port}`);
+
+
+// Adicione o 'async' aqui antes dos parâmetros ()
+app.listen(config.port, async () => { 
+  console.log(`[SimplesAgenda] API rodando em http://localhost:${config.port}`);
+  console.log(`[SimplesAgenda] Interface: http://localhost:${config.port}`);
+  
   if (config.apiKey) {
-    console.log('[rsalcara] API Key ativa. Use header: x-api-key');
+    console.log('[SimplesAgenda] API Key ativa. Use header: x-api-key');
+  }
+
+  // Lógica de Restauração
+  try {
+    // Como você mencionou uma pasta 'auth' na sua estrutura, 
+    // certifique-se que o nome aqui coincide com a pasta onde o Baileys salva as sessões.
+    const authFolder = 'auth'; 
+    
+    console.log(`[SimplesAgenda] Iniciando restauração de sessões...`);
+    const restored = await restoreSessions(authFolder);
+    
+    if (restored.length > 0) {
+      console.log(`[SimplesAgenda] 🎉 ${restored.length} sessões restauradas: ${restored.join(', ')}`);
+    } else {
+      console.log(`[SimplesAgenda] Nenhuma sessão encontrada para restaurar em ./${authFolder}`);
+    }
+  } catch (error) {
+    console.error(`[SimplesAgenda] Erro crítico na restauração:`, error);
   }
 });

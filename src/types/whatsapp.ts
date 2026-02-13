@@ -1,7 +1,11 @@
+import type { WASocket, AnyMessageContent, proto } from '@whiskeysockets/baileys';
+
 /**
  * Tipos para o socket InfiniteAPI/Baileys.
- * O socket expõe sendMessage com nativeButtons, nativeList, nativeCarousel, etc.
+ * * WASocketLike combina a tipagem oficial do Baileys com as extensões
+ * personalizadas (Native Buttons, Lists, Carousel) que você utiliza.
  */
+
 export interface InstanceContext {
   name: string;
   sock: WASocketLike;
@@ -11,13 +15,20 @@ export interface InstanceContext {
   authFolder: string;
 }
 
-export interface WASocketLike {
-  sendMessage: (jid: string, content: MessageContent) => Promise<{ key?: { id?: string }; messageTimestamp?: number }>;
-  relayMessage?: (jid: string, content: unknown, opts?: unknown) => Promise<unknown>;
-  ev: { on: (event: string, handler: (...args: unknown[]) => void) => void };
-  logout?: () => Promise<void>;
-  ws?: { close: () => void };
-}
+/**
+ * Aqui acontece a mágica:
+ * Pegamos o WASocket oficial e sobrescrevemos o método 'sendMessage' 
+ * para aceitar seus tipos personalizados (CustomMessageContent).
+ */
+export type WASocketLike = Omit<WASocket, 'sendMessage'> & {
+  sendMessage: (
+    jid: string, 
+    content: AnyMessageContent | CustomMessageContent, // Aceita o padrão E o customizado
+    options?: any
+  ) => Promise<proto.IWebMessageInfo | undefined>;
+};
+
+// --- Interfaces dos Botões e Listas Nativos ---
 
 export interface NativeButtonReply {
   type: 'reply';
@@ -65,7 +76,11 @@ export interface NativeCarouselCard {
   buttons?: Array<{ type?: string; id: string; text: string }>;
 }
 
-export interface MessageContent {
+/**
+ * Conteúdo personalizado que não existe no Baileys oficial,
+ * mas existe na sua implementação (InfiniteAPI/Fork).
+ */
+export interface CustomMessageContent {
   text?: string;
   footer?: string;
   nativeButtons?: NativeButton[];
@@ -86,5 +101,6 @@ export interface MessageContent {
     options: Array<{ optionName: string }>;
     selectableOptionsCount?: number;
   };
+  // Permite outros campos caso a API mude
   [key: string]: unknown;
 }
